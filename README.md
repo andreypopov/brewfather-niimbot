@@ -10,13 +10,16 @@ target printer is **Niimbot D11_H, 300 dpi**, rather than the older 203 dpi D11.
 
 ## Install the unpacked extension
 
-1. Open `chrome://extensions` in Chrome on macOS or Windows.
-2. Enable **Developer mode** and click **Load unpacked**.
-3. Select this folder: `/Users/apopov/Sites/brewery/extensions/brewfather-niimbot`.
-4. Open the extension settings from its card with **Details → Extension options**.
-5. Choose your existing `.env.local` file in the file picker, or enter the Brewfather
+1. Download this repository with **Code → Download ZIP**, or clone it with
+   `git clone https://github.com/andreypopov/brewfather-niimbot.git`.
+2. Open `chrome://extensions` in Chrome on macOS or Windows.
+3. Enable **Developer mode** and click **Load unpacked**.
+4. Select the downloaded or cloned repository folder, the folder that contains
+   `manifest.json`.
+5. Open the extension settings from its card with **Details → Extension options**.
+6. Choose your existing `.env.local` file in the file picker, or enter the Brewfather
    User ID and API key manually. The API key needs **Read Batches** permission.
-6. Click **Save settings** and reload the Brewfather tab. Buttons will appear in Batches.
+7. Click **Save settings** and reload the Brewfather tab. Buttons will appear in Batches.
 
 The repository also contains a ready-to-download package at
 `dist/brewfather-niimbot-0.1.0.zip`. Chrome's **Load unpacked** expects a folder,
