@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="470" viewBox="0 0 1000 470" role="img" aria-labelledby="title desc">
+  <title id="title">Example 40 by 14 millimetre thermal label</title>
+  <desc id="desc">A white thermal label showing a beer name, style, ABV, IBU, original gravity, final gravity, batch number and brew date.</desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-30%" width="120%" height="160%"><feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#000" flood-opacity=".28"/></filter>
+    <pattern id="grid" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M12 0H0V12" fill="none" stroke="#e7e2d8" stroke-width="1"/></pattern>
+  </defs>
+  <rect width="1000" height="470" rx="24" fill="#eee9df"/>
+  <text x="54" y="61" fill="#5e574b" font-family="Arial,sans-serif" font-size="20" font-weight="700">Preview before printing</text>
+  <text x="54" y="89" fill="#82796b" font-family="Arial,sans-serif" font-size="14">Default roll: 40 × 14 mm · D11H print head: 144 dots</text>
+  <rect x="54" y="122" width="892" height="245" rx="15" fill="url(#grid)" opacity=".42"/>
+  <g filter="url(#shadow)">
+    <rect x="96" y="157" width="808" height="175" rx="10" fill="#fff"/>
+    <text x="124" y="202" fill="#111" font-family="Arial,sans-serif" font-size="29" font-weight="700">Citra American Pale Ale - 50 L</text>
+    <text x="124" y="232" fill="#111" font-family="Arial,sans-serif" font-size="18">American Pale Ale</text>
+    <text x="124" y="263" fill="#111" font-family="Arial,sans-serif" font-size="21" font-weight="700">ABV ≈4.7%   IBU 47</text>
+    <text x="124" y="291" fill="#111" font-family="Arial,sans-serif" font-size="21" font-weight="700">OG 1.046   FG ≈1.010</text>
+    <text x="124" y="316" fill="#111" font-family="Arial,sans-serif" font-size="15">#119 · 31.08.2026</text>
+  </g>
+  <rect x="736" y="43" width="164" height="38" rx="19" fill="#5b4a2b"/>
+  <text x="818" y="68" text-anchor="middle" fill="#f8dda2" font-family="Arial,sans-serif" font-size="14" font-weight="700">THERMAL LABEL</text>
+  <text x="500" y="414" text-anchor="middle" fill="#6f6658" font-family="Arial,sans-serif" font-size="14">Missing measured values are marked with ≈ so the preview stays honest.</text>
+</svg>
