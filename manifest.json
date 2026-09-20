@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Brewfather → Niimbot D11H",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Print the current Brewfather batch on a Niimbot D11H over Bluetooth.",
   "minimum_chrome_version": "114",
   "permissions": ["storage"],
@@ -11,7 +11,7 @@
   "options_page": "options.html",
   "content_scripts": [{
     "matches": ["https://web.brewfather.app/*"],
-    "js": ["vendor/niimbot.js", "label.js", "content.js"],
+    "js": ["vendor/niimbot.js", "vendor/qrcode-generator.js", "label.js", "content.js"],
     "run_at": "document_idle",
     "all_frames": false
   }]

@@ -1,6 +1,6 @@
 (function (root) {
   "use strict";
-  const DEFAULTS = Object.freeze({lengthMm: 40, widthMm: 14, copies: 1, density: 3, offsetMm: 0, rotate180: false});
+  const DEFAULTS = Object.freeze({lengthMm: 40, widthMm: 14, copies: 1, density: 3, offsetMm: 0, rotate180: false, addQrDefault: false, addQr: false});
   const MODEL = Object.freeze({id: 528, dpi: 300, task: "v4", density: 3, label_type: 1, speed: 1, name_prefixes: ["D11"]});
   const number = value => typeof value === "number" && Number.isFinite(value) ? value : null;
   const text = value => typeof value === "string" ? value.replace(/[\u0000-\u001f]/g, " ").trim() : "";
@@ -26,8 +26,10 @@
         result[key] = n;
       }
     }
-    if (input.rotate180 !== undefined && typeof input.rotate180 !== "boolean") throw new Error("Invalid rotation setting.");
-    result.rotate180 = input.rotate180 ?? DEFAULTS.rotate180;
+    for (const key of ["rotate180", "addQrDefault", "addQr"]) {
+      if (input[key] !== undefined && typeof input[key] !== "boolean") throw new Error(`Invalid ${key} setting.`);
+      result[key] = input[key] ?? DEFAULTS[key];
+    }
     return result;
   }
 
@@ -35,6 +37,43 @@
     const s = settings(input), ppm = 300 / 25.4;
     return {w_px: Math.min(144, Math.round(s.widthMm * ppm)), h_px: Math.round(s.lengthMm * ppm),
       dpi: 300, offset_y_px: Math.round(s.offsetMm * ppm)};
+  }
+
+  function normalizeShareUrl(value) {
+    if (typeof value !== "string") return "";
+    const raw = value.replace(/[\u0000-\u001f]/g, " ").trim();
+    try {
+      const u = new URL(raw);
+      if (u.protocol !== "https:") return "";
+      if (u.hostname === "share.brewfather.app" && /^\/[A-Za-z0-9_-]{4,160}$/.test(u.pathname)) {
+        return `${u.origin}${u.pathname}`;
+      }
+      if (u.hostname === "web.brewfather.app" && /^\/share\/[A-Za-z0-9_-]{4,160}$/.test(u.pathname)) {
+        return `${u.origin}${u.pathname}`;
+      }
+    } catch {}
+    return "";
+  }
+
+  function findSharedRecipeUrl(recipe) {
+    const visited = new Set();
+    const visit = (value, path, depth) => {
+      if (!value || typeof value !== "object" || depth > 4 || visited.has(value)) return "";
+      visited.add(value);
+      for (const [key, child] of Object.entries(value)) {
+        const candidate = normalizeShareUrl(child);
+        if (candidate) return candidate;
+        const context = [...path, key].join(".").toLowerCase();
+        if (typeof child === "string" && /(share|public|published)/.test(context) &&
+            /^(?:[A-Za-z0-9_-]){4,160}$/.test(child.trim())) {
+          return `https://share.brewfather.app/${child.trim()}`;
+        }
+        const nested = visit(child, [...path, key], depth + 1);
+        if (nested) return nested;
+      }
+      return "";
+    };
+    return visit(recipe, [], 0);
   }
 
   function normalize(batch) {
@@ -60,7 +99,8 @@
     const brewDate = number(batch.brewDate);
     const date = brewDate === null ? "" : new Intl.DateTimeFormat("ru-RU", {timeZone: "Europe/London"}).format(new Date(brewDate));
     return {id: text(batch._id), name: text(r.name), batchName: text(batch.name),
-      batchNo: number(batch.batchNo), style: text(r.style?.name), date, metrics, warnings};
+      batchNo: number(batch.batchNo), style: text(r.style?.name), date, metrics, warnings,
+      shareUrl: findSharedRecipeUrl(r)};
   }
 
   function metric(m, digits, mark = true) {
@@ -76,6 +116,27 @@
       [label.batchNo === null ? "" : `#${label.batchNo}`, label.date].filter(Boolean).join("  ·  ")];
   }
 
+  function drawQr(ctx, label, x, y, size) {
+    if (!label.shareUrl) return "QR code was requested, but this recipe has no Brewfather share link. Open the recipe, use Share, and preview it again.";
+    const factory = root.qrcode;
+    if (typeof factory !== "function") return "QR code generator is unavailable. Reload the extension and try again.";
+    try {
+      const qr = factory(0, "M");
+      qr.addData(label.shareUrl, "Byte"); qr.make();
+      const modules = qr.getModuleCount(), quiet = 4, cell = Math.floor(size / (modules + quiet * 2));
+      if (cell < 2) return "QR code is too small for this tape width. Choose at least a 9 mm tape width or turn Add QR off.";
+      const total = cell * (modules + quiet * 2), left = x + Math.floor((size - total) / 2), top = y + Math.floor((size - total) / 2);
+      ctx.fillStyle = "#fff"; ctx.fillRect(x, y, size, size);
+      ctx.fillStyle = "#000";
+      for (let row = 0; row < modules; row++) for (let col = 0; col < modules; col++) {
+        if (qr.isDark(row, col)) ctx.fillRect(left + (col + quiet) * cell, top + (row + quiet) * cell, cell, cell);
+      }
+      return "";
+    } catch (error) {
+      return `QR code could not be generated: ${error.message || "invalid share link"}.`;
+    }
+  }
+
   // Draw the same pixels for preview and print. The head axis is limited to 144 dots;
   // the horizontal reading direction runs along the feed axis, so rotate once for BLE.
   function render(label, input, makeCanvas = () => document.createElement("canvas")) {
@@ -84,7 +145,8 @@
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#000"; ctx.textBaseline = "middle";
-    const margin = 14, available = canvas.width - 2 * margin;
+    const margin = 14, qrGap = 12, qrSize = s.addQr ? Math.min(canvas.height - 2 * margin, 108) : 0;
+    const qrX = canvas.width - margin - qrSize, available = canvas.width - 2 * margin - (qrSize ? qrSize + qrGap : 0);
     const rows = lines(label), sizes = [29, 20, 22, 20, 17];
     const weights = [700, 400, 700, 400, 400];
     const centers = [0.16, 0.37, 0.56, 0.74, 0.90];
@@ -102,6 +164,7 @@
       }
       ctx.fillText(fitted, margin, Math.round(canvas.height * centers[i]));
     });
+    const qrWarnings = s.addQr ? [drawQr(ctx, label, qrX, Math.round((canvas.height - qrSize) / 2), qrSize)].filter(Boolean) : [];
     const output = makeCanvas(); output.width = g.w_px; output.height = g.h_px;
     const out = output.getContext("2d");
     out.fillStyle = "#fff"; out.fillRect(0, 0, output.width, output.height);
@@ -109,10 +172,10 @@
     if (s.rotate180) { out.translate(0, output.height); out.rotate(-Math.PI / 2); }
     else { out.translate(output.width, 0); out.rotate(Math.PI / 2); }
     out.drawImage(canvas, 0, 0); out.restore();
-    return {canvas, output, size: g, warnings: overflow};
+    return {canvas, output, size: g, warnings: [...qrWarnings, ...overflow]};
   }
 
-  const api = {DEFAULTS, MODEL, batchId, settings, geometry, normalize, lines, render};
+  const api = {DEFAULTS, MODEL, batchId, settings, geometry, normalize, findSharedRecipeUrl, lines, render};
   root.BrewLabel = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

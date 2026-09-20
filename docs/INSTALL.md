@@ -12,7 +12,7 @@ Choose one of these options:
 
 - Download the [latest source ZIP](https://github.com/andreypopov/brewfather-niimbot/archive/refs/heads/main.zip)
   and unzip it.
-- Download the smaller [credential-free package](https://github.com/andreypopov/brewfather-niimbot/raw/main/dist/brewfather-niimbot-0.2.0.zip)
+- Download the smaller [credential-free package](https://github.com/andreypopov/brewfather-niimbot/raw/main/dist/brewfather-niimbot-0.3.0.zip)
   and unzip it.
 - Clone the repository with:
 
@@ -72,6 +72,8 @@ your installed roll is different:
 - **Print density** controls how dark the thermal image is.
 - **Feed offset, mm** adds or removes a small amount of leading feed after you
   calibrate the roll.
+- **Add QR code by default** starts each new preview with a QR code. In the
+  preview panel, **Add QR** can be changed for the current job.
 
 The settings page includes an enlarged sample label, so check the geometry before
 using real tape.
@@ -85,8 +87,10 @@ using real tape.
 3. Open **Batches** in Brewfather.
 4. Click the single **Print label** button in the batch header.
 5. Confirm the label preview and enter the desired **Copies**. The default is `1`.
-6. Click the panel's **Print** button.
-7. Select `D11_H` in Chrome's Bluetooth chooser and allow Bluetooth if macOS asks.
+6. Optionally enable **Add QR**. The recipe must already have a public
+   Brewfather share link; otherwise the preview explains how to resolve it.
+7. Click the panel's **Print** button.
+8. Select `D11_H` in Chrome's Bluetooth chooser and allow Bluetooth if macOS asks.
 
 The first click only loads fresh batch data and draws the preview. The printer is
 not contacted until the second **Print** click. The testable preview also shows
@@ -120,6 +124,7 @@ access values remain in the extension's local storage.
 | Access is missing | Save both User ID and API key; check that the key can read batches. |
 | No D11H in the chooser | Turn on the printer, close the phone app, and keep the printer near the Mac or PC. |
 | Preview text is clipped | Increase **Length, mm** in **Label settings** and preview again. |
+| QR is unavailable | Share the recipe in Brewfather, preview again, or turn **Add QR** off for this label. |
 | A second label does not start | Wait for the status message to finish; Web Locks prevents concurrent jobs from other tabs. |
 
 For API behavior, rendering details, privacy, and development checks, see the

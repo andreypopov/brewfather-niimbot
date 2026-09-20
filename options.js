@@ -4,17 +4,17 @@
   const extension = !!globalThis.chrome?.runtime?.id;
   let preview;
   const keys = ["lengthMm", "widthMm", "density", "offsetMm"];
-  function values() { return B.settings({...Object.fromEntries(keys.map(key => [key, Number($(key).value)])), rotate180: $("rotate180").checked}); }
+  function values() { return B.settings({...Object.fromEntries(keys.map(key => [key, Number($(key).value)])), rotate180: $("rotate180").checked, addQrDefault: $("addQrDefault").checked}); }
   function render() {
     try {
-      const s = values(); preview = B.render(B.normalize(BrewLabelSample), s);
+      const s = values(); preview = B.render(B.normalize(BrewLabelSample), {...s, addQr: s.addQrDefault});
       $("paper").replaceChildren(preview.canvas); $("paper").style.aspectRatio = String(s.lengthMm / s.widthMm);
       $("dimensions").textContent = `${s.lengthMm} × ${s.widthMm} mm`;
       $("preview-note").textContent = [...B.normalize(BrewLabelSample).warnings, ...preview.warnings].join(" ");
       $("preview-note").classList.remove("error");
     } catch (e) { $("preview-note").textContent = e.message; $("preview-note").classList.add("error"); }
   }
-  for (const key of [...keys, "rotate180"]) $(key).addEventListener("input", render);
+  for (const key of [...keys, "rotate180", "addQrDefault"]) $(key).addEventListener("input", render);
   $("download").onclick = () => {
     if (!preview) return;
     const a = document.createElement("a"); a.href = preview.canvas.toDataURL("image/png");
@@ -61,7 +61,7 @@
     if (extension) {
       const saved = await chrome.storage.local.get("settings");
       const s = B.settings(saved.settings);
-      for (const key of keys) $(key).value = s[key]; $("rotate180").checked = s.rotate180;
+      for (const key of keys) $(key).value = s[key]; $("rotate180").checked = s.rotate180; $("addQrDefault").checked = s.addQrDefault;
       await credentialState();
     } else {
       $("credentials-section").hidden = true; $("save").hidden = true;

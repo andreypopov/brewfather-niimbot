@@ -7,8 +7,9 @@
 
 Print a fresh Brewfather batch label on a **Niimbot D11H** directly from Chrome.
 The extension adds one **Print label** button to each batch card, opens a live
-preview, lets you choose the number of copies, and sends the final image over
-Bluetooth. It does not edit recipes, batches, inventory, or fermentation data.
+preview, lets you choose the number of copies and whether to add a QR code, and
+sends the final image over Bluetooth. It does not edit recipes, batches,
+inventory, or fermentation data.
 
 ![Brewfather to Niimbot three-step workflow](docs/images/workflow.svg)
 
@@ -30,7 +31,10 @@ so an accidental click on a batch card cannot waste a label.
 
 The default roll is **40 × 14 mm**, with one copy and normal print density. The
 label length, tape width, density, and feed offset are configurable. The copy
-count is selected for each job in the preview panel, from 1 to 50.
+count is selected for each job in the preview panel, from 1 to 50. The optional
+**Add QR** checkbox reserves a square on the label for a QR code that opens the
+recipe's Brewfather share link. **Add QR code by default** in the extension
+options controls the initial value for every new preview.
 
 ## Install in five minutes
 
@@ -59,7 +63,7 @@ The included [.env.example](.env.example) shows the expected variable names.
 
 The repository also contains a credential-free package:
 
-[Download `brewfather-niimbot-0.2.0.zip`](https://github.com/andreypopov/brewfather-niimbot/raw/main/dist/brewfather-niimbot-0.2.0.zip)
+[Download `brewfather-niimbot-0.3.0.zip`](https://github.com/andreypopov/brewfather-niimbot/raw/main/dist/brewfather-niimbot-0.3.0.zip)
 
 Unzip it first, then select the extracted `brewfather-niimbot` folder in **Load
 unpacked**. The package contains only the files needed by the extension; tests and
@@ -74,8 +78,9 @@ For a full illustrated walkthrough, see [docs/INSTALL.md](docs/INSTALL.md).
 2. Close the NIIMBOT phone app if it is holding the Bluetooth connection.
 3. In Brewfather, click **Print label** on the desired batch card.
 4. Check the preview. Set **Copies**; it starts at `1` for every new preview.
-5. Click **Print**, then choose `D11_H` in Chrome's Bluetooth chooser.
-6. If macOS asks, allow Chrome to use Bluetooth.
+5. Turn on **Add QR** when the recipe already has a Brewfather share link.
+6. Click **Print**, then choose `D11_H` in Chrome's Bluetooth chooser.
+7. If macOS asks, allow Chrome to use Bluetooth.
 
 The extension refreshes the selected batch immediately before printing. While the
 tab and connection remain open, later jobs can print from the preview panel
@@ -104,6 +109,16 @@ The bottom line contains the batch number and brew date in the
 `Europe/London` time zone. The example above has no measured final gravity, so
 the estimated FG and ABV remain marked as estimates until Brewfather has a final
 measurement.
+
+### QR code labels
+
+When **Add QR** is checked, the renderer reads a public share URL already
+present on the batch's recipe data and draws the QR code directly into the
+preview. The code points to Brewfather's public share page, so a person can
+open the recipe without signing in. Create or verify the recipe's **Share**
+link in Brewfather before enabling the option. If no share link is available,
+the preview explains the problem and the extension blocks the print until you
+turn **Add QR** off or share the recipe.
 
 ## How batch matching works
 
@@ -154,6 +169,7 @@ label roll.
 | Bluetooth chooser is empty | Turn on the D11H, close the NIIMBOT phone app, keep Chrome near the printer, and try **Print** again. |
 | The wrong roll size is shown | Open **Label settings**, change length or width, and preview the batch again before printing. |
 | Text does not fit | Choose a longer label length or shorten the recipe name in Brewfather. The extension blocks a print with clipped text. |
+| QR code is unavailable | Share the recipe in Brewfather, preview the batch again, or turn **Add QR** off for this job. |
 | Chrome asks for the printer again | This is expected after a tab reload, browser restart, printer shutdown, or lost Bluetooth connection. |
 
 ## Development
@@ -184,19 +200,20 @@ python3 package.py
 ```
 
 The current test suite covers metrics, missing values, geometry, IDs, unique card
-matching, pagination, GET-only API requests, and BLE rotation. The public GitHub
-Actions workflow runs the same tests on every push.
+matching, pagination, GET-only API requests, BLE rotation, share-link validation,
+and QR rendering. The public GitHub Actions workflow runs the same tests on every
+push.
 
 ## Repository map
 
 | Path | Purpose |
 | --- | --- |
 | `manifest.json` | Chrome Manifest V3 entry point and permissions |
-| `content.js` | Brewfather buttons, preview panel, copy input, and print flow |
-| `label.js` | Label normalization, metrics, geometry, and rendering |
+| `content.js` | Brewfather buttons, preview panel, copy input, QR option, and print flow |
+| `label.js` | Label normalization, share-link extraction, QR/metrics rendering, and geometry |
 | `api.js` / `background.js` | Read-only Brewfather API access in the trusted context |
 | `options.html` / `options.js` | English settings page and local credential import |
-| `vendor/` | Pinned Niimbot Web Bluetooth driver and license |
+| `vendor/` | Pinned Niimbot driver, local QR generator, and licenses |
 | `tests/` | Automated tests and a credential-free browser harness |
 | `docs/images/` | Documentation illustrations used in this README |
 

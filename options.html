@@ -18,7 +18,7 @@
       <label>Length, mm<input id="lengthMm" type="number" min="20" max="100" step="0.1" value="40" required></label>
       <label>Tape width, mm<input id="widthMm" type="number" min="8" max="15" step="0.1" value="14" required></label>
       <label>Print density<select id="density"><option value="1">1 — lighter</option><option value="2">2</option><option value="3" selected>3 — normal</option><option value="4">4</option><option value="5">5 — darker</option></select></label>
-    </div><details><summary>Position on tape</summary><div class="fields advanced">
+    </div><label class="checkbox"><input id="addQrDefault" type="checkbox">Add QR code by default</label><p class="hint">Start each new preview with a QR code that opens the recipe's Brewfather share link.</p><details><summary>Position on tape</summary><div class="fields advanced">
       <label>Feed offset, mm<input id="offsetMm" type="number" min="-1" max="1" step="0.1" value="0"></label>
       <label class="checkbox"><input id="rotate180" type="checkbox">Rotate 180°</label>
     </div><p class="hint">Start with an offset of 0. Check the size before printing after changing rolls. D11H prints a band about 12.2 mm wide on 14–15 mm tape.</p></details></section>
@@ -29,8 +29,8 @@
     </section>
     <div class="footer"><button id="save" type="submit">Save settings</button><span id="save-state" role="status" aria-live="polite"></span></div>
   </form>
-  <section class="workflow"><h2>First run</h2><ol><li>Save your Brewfather access details and the size of the installed label roll.</li><li>Open Batches and click “Print label” on a batch to open its preview.</li><li>Set the number of copies, click “Print”, and choose the printer in Chrome’s Bluetooth dialog.</li></ol><p class="hint">While the tab and connection stay open, the next label prints from the preview panel. Chrome may ask you to choose the printer again after a page reload.</p></section>
+  <section class="workflow"><h2>First run</h2><ol><li>Save your Brewfather access details and the size of the installed label roll.</li><li>Open Batches and click “Print label” on a batch to open its preview.</li><li>Optionally turn on <b>Add QR</b> for that job, set the number of copies, click “Print”, and choose the printer in Chrome’s Bluetooth dialog.</li></ol><p class="hint">While the tab and connection stay open, the next label prints from the preview panel. Chrome may ask you to choose the printer again after a page reload.</p></section>
   <footer>300 dpi · Bluetooth · Batch data is refreshed before every print</footer>
 </main>
-<script src="label.js"></script><script src="sample.js"></script><script src="options.js"></script>
+<script src="vendor/qrcode-generator.js"></script><script src="label.js"></script><script src="sample.js"></script><script src="options.js"></script>
 </html>

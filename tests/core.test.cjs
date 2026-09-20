@@ -1,6 +1,7 @@
 const {test} = require("node:test");
 const assert = require("node:assert/strict");
 const B = require("../label.js");
+globalThis.qrcode = require("../vendor/qrcode-generator.js");
 const A = require("../api.js");
 require("../sample.js");
 const fixture = () => structuredClone(globalThis.BrewLabelSample);
@@ -36,6 +37,14 @@ test("40 × 14 mm uses the 144-dot head and 472-dot feed axis", () => {
   assert.equal(B.geometry({lengthMm: 50, widthMm: 15}).h_px, 591);
   assert.equal(B.geometry({widthMm: 8}).w_px, 94);
   for (const bad of [{copies: 0}, {copies: 1.5}, {density: 6}, {lengthMm: "40"}, {offsetMm: 2}, {widthMm: Infinity}]) assert.throws(() => B.settings(bad));
+  assert.equal(B.settings({addQrDefault: true}).addQrDefault, true);
+  assert.throws(() => B.settings({addQrDefault: "yes"}));
+});
+test("recipe share links are accepted only from Brewfather public-share forms", () => {
+  assert.equal(B.findSharedRecipeUrl({shareUrl: "https://share.brewfather.app/etWBx3UNaKixBc"}), "https://share.brewfather.app/etWBx3UNaKixBc");
+  assert.equal(B.findSharedRecipeUrl({share: {id: "etWBx3UNaKixBc"}}), "https://share.brewfather.app/etWBx3UNaKixBc");
+  assert.equal(B.findSharedRecipeUrl({shareUrl: "https://evil.example/etWBx3UNaKixBc", _id: "internal-id"}), "");
+  assert.equal(B.normalize({...fixture(), recipe: {...fixture().recipe, shareUrl: "https://web.brewfather.app/share/etWBx3UNaKixBc"}}).shareUrl, "https://web.brewfather.app/share/etWBx3UNaKixBc");
 });
 test("only Brewfather batch URLs produce a batch ID", () => {
   assert.equal(B.batchId("https://web.brewfather.app/tabs/batches/batch/abc123?foo=bar"), "abc123");
@@ -88,4 +97,16 @@ test("BLE canvas is rotated, without resizing or stretching landscape pixels", (
   assert.equal(r.output.width, 144); assert.equal(r.output.height, 472);
   assert.deepEqual(calls.find(c => c[0] === "rotate"), ["rotate", Math.PI / 2]);
   assert.deepEqual(calls.find(c => c[0] === "drawImage").slice(2), [0, 0]);
+});
+test("QR rendering reserves a square and blocks printing when a share link is missing", () => {
+  const makeCanvas = () => {
+    const context = {fillRect(){}, fillText(){}, measureText: s => ({width: s.length * 2}),
+      save(){}, restore(){}, translate(){}, rotate(){}, drawImage(){}};
+    return {width: 0, height: 0, getContext: () => context};
+  };
+  const withQr = B.render(B.normalize(fixture()), {...B.DEFAULTS, addQr: true}, makeCanvas);
+  assert.equal(withQr.warnings.length, 0);
+  const missing = fixture(); delete missing.recipe.shareUrl;
+  const withoutLink = B.render(B.normalize(missing), {...B.DEFAULTS, addQr: true}, makeCanvas);
+  assert.match(withoutLink.warnings[0], /no Brewfather share link/);
 });

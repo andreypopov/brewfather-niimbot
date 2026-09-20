@@ -21,10 +21,18 @@
     header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}h3{font-size:16px;margin:0}p{line-height:1.5;margin:10px 0}button.close{border:0;background:none;font-size:22px;padding:0 4px}
     .paper{background:white;border-radius:6px;display:flex;align-items:center;justify-content:center;padding:8px 0;overflow:hidden}.paper canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
     .muted{color:#b8b5af;font-size:12px}.status{white-space:pre-wrap;overflow-wrap:anywhere}.error{color:#ffb4a9}.actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
-    .job-controls{display:flex;align-items:end;gap:10px;margin-top:14px}.copies-label{display:flex;flex-direction:column;gap:5px;color:#b8b5af;font-size:12px}.copies{width:84px;padding:8px 9px;border:1px solid #756344;border-radius:6px;color:#eee;background:#302b22;font:inherit}.copies:focus{outline:2px solid #ffcc67;outline-offset:1px}.print-now{min-width:92px}
-    </style><section class="panel" role="region" aria-label="Brewfather label"><header><h3>Batch label</h3><button class="close" title="Close" aria-label="Close">×</button></header><div class="paper" hidden></div><p class="meta muted"></p><p class="status" role="status" aria-live="polite"></p><p class="notes muted"></p><div class="job-controls"><label class="copies-label" for="brewlabel-copies">Copies<input class="copies" id="brewlabel-copies" type="number" min="1" max="50" step="1" value="1" inputmode="numeric"></label><button class="print-now">Print</button></div><div class="actions"><button class="settings">Label settings</button><button class="disconnect">Disconnect printer</button></div></section>`;
-  const status = panel.querySelector(".status"), paper = panel.querySelector(".paper"), copiesInput = panel.querySelector(".copies");
+    .job-controls{display:flex;align-items:end;gap:10px;margin-top:14px}.copies-label{display:flex;flex-direction:column;gap:5px;color:#b8b5af;font-size:12px}.copies{width:84px;padding:8px 9px;border:1px solid #756344;border-radius:6px;color:#eee;background:#302b22;font:inherit}.copies:focus{outline:2px solid #ffcc67;outline-offset:1px}.qr-label{display:flex;align-items:center;gap:6px;height:35px;color:#eee;white-space:nowrap}.qr-label input{width:16px;height:16px;accent-color:#f0c76b}.print-now{min-width:92px}
+    </style><section class="panel" role="region" aria-label="Brewfather label"><header><h3>Batch label</h3><button class="close" title="Close" aria-label="Close">×</button></header><div class="paper" hidden></div><p class="meta muted"></p><p class="status" role="status" aria-live="polite"></p><p class="notes muted"></p><div class="job-controls"><label class="copies-label" for="brewlabel-copies">Copies<input class="copies" id="brewlabel-copies" type="number" min="1" max="50" step="1" value="1" inputmode="numeric"></label><label class="qr-label"><input class="add-qr" type="checkbox">Add QR</label><button class="print-now">Print</button></div><div class="actions"><button class="settings">Label settings</button><button class="disconnect">Disconnect printer</button></div></section>`;
+  const status = panel.querySelector(".status"), paper = panel.querySelector(".paper"), copiesInput = panel.querySelector(".copies"), qrInput = panel.querySelector(".add-qr");
   panel.querySelector(".close").onclick = () => { activePreview = null; panelHost.style.display = "none"; };
+  qrInput.onchange = () => {
+    if (busy || !activePreview) return;
+    try {
+      const copies = readCopies();
+      const result = draw(activePreview.label, {...activePreview.settings, copies, addQr: qrInput.checked});
+      showStatus(result.warnings.length ? "Preview updated. Resolve the note below or turn off Add QR, then click Print." : "Preview updated. Set the number of copies, then click Print.");
+    } catch (error) { showError(error); }
+  };
   panel.querySelector(".settings").onclick = () => rpc({type: "open-options"}).catch(showError);
   panel.querySelector(".disconnect").onclick = async () => {
     if (busy) return;
@@ -35,7 +43,7 @@
     if (busy) return;
     try {
       if (!activePreview) throw new Error("Preview a batch first, then click Print.");
-      run(activePreview.binding, true, readCopies()).catch(showError);
+      run(activePreview.binding, true, readCopies(), qrInput.checked).catch(showError);
     } catch (error) { showError(error); }
   };
 
@@ -61,6 +69,7 @@
     for (const {shadow} of bindings.values()) for (const btn of shadow.querySelectorAll("button")) btn.disabled = value;
     panel.querySelector(".print-now").disabled = value;
     panel.querySelector(".copies").disabled = value;
+    panel.querySelector(".add-qr").disabled = value;
     panel.querySelector(".settings").disabled = value;
     panel.querySelector(".disconnect").disabled = value;
   }
@@ -89,11 +98,11 @@
     const result = B.render(label, settings);
     paper.hidden = false; paper.replaceChildren(result.canvas);
     panel.querySelector("h3").textContent = `Batch label${label.batchNo === null ? "" : ` #${label.batchNo}`}`;
-    panel.querySelector(".meta").textContent = `${settings.lengthMm} × ${settings.widthMm} mm · ${settings.copies} ${settings.copies === 1 ? "copy" : "copies"} · D11H`;
+    panel.querySelector(".meta").textContent = `${settings.lengthMm} × ${settings.widthMm} mm · ${settings.copies} ${settings.copies === 1 ? "copy" : "copies"} · D11H${settings.addQr ? " · QR" : ""}`;
     panel.querySelector(".notes").textContent = [...label.warnings, ...result.warnings].join(" ");
     return result;
   }
-  async function run(binding, print = false, requestedCopies = null) {
+  async function run(binding, print = false, requestedCopies = null, requestedQr = null) {
     if (busy) return;
     if (!print) activePreview = null;
     if (!config?.configured) {
@@ -120,15 +129,17 @@
           await Niimbot.disconnect(); throw new Error(`Selected ${printer?.label || "an unidentified printer"}. Niimbot D11_H (300 dpi) is required.`);
         }
         const copies = print ? (requestedCopies ?? readCopies()) : 1;
-        const printSettings = {...fresh.settings, copies};
+        const addQr = print ? (requestedQr ?? qrInput.checked) : Boolean(fresh.settings.addQrDefault);
+        const printSettings = {...fresh.settings, copies, addQr};
         const result = draw(reply.label, printSettings);
         if (!print) {
           copiesInput.value = "1";
-          activePreview = {binding, snapshot, url};
-          showStatus("Preview ready. Set the number of copies, then click Print.");
+          qrInput.checked = Boolean(fresh.settings.addQrDefault);
+          activePreview = {binding, snapshot, url, label: reply.label, settings: fresh.settings};
+          showStatus(result.warnings.length ? "Preview ready. Resolve the note below or turn off Add QR, then click Print." : "Preview ready. Set the number of copies, then click Print.");
           return;
         }
-        if (result.warnings.length) throw new Error("The text does not fit. Choose a longer label in settings.");
+        if (result.warnings.length) throw new Error(result.warnings.join(" "));
         await Niimbot.printImage(result.output.toDataURL("image/png"), {
           model: B.MODEL, size: result.size, copies, density: fresh.settings.density,
           onProgress: p => showStatus(p === "ok" ? "The printer confirmed completion." : "Printing…")

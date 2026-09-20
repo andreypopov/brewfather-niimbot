@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="470" viewBox="0 0 1000 470" role="img" aria-labelledby="title desc">
   <title id="title">Example 40 by 14 millimetre thermal label</title>
-  <desc id="desc">A white thermal label showing a beer name, style, ABV, IBU, original gravity, final gravity, batch number and brew date.</desc>
+  <desc id="desc">A white thermal label showing a beer name, style, brewing metrics, batch number, brew date and an optional QR code for the shared recipe.</desc>
   <defs>
     <filter id="shadow" x="-10%" y="-30%" width="120%" height="160%"><feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#000" flood-opacity=".28"/></filter>
     <pattern id="grid" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M12 0H0V12" fill="none" stroke="#e7e2d8" stroke-width="1"/></pattern>
@@ -16,8 +16,12 @@
     <text x="124" y="263" fill="#111" font-family="Arial,sans-serif" font-size="21" font-weight="700">ABV ≈4.7%   IBU 47</text>
     <text x="124" y="291" fill="#111" font-family="Arial,sans-serif" font-size="21" font-weight="700">OG 1.046   FG ≈1.010</text>
     <text x="124" y="316" fill="#111" font-family="Arial,sans-serif" font-size="15">#119 · 31.08.2026</text>
+    <g transform="translate(778 183)">
+      <rect width="100" height="100" fill="#fff"/>
+      <path fill="#111" d="M4 4h28v28H4zM8 8v20h20V8H8zm7 7h6v6h-6zM68 4h28v28H68zM72 8v20h20V8H72zm7 7h6v6h-6zM4 68h28v28H4zM8 72v20h20V72H8zm7 7h6v6h-6zM40 4h6v6h-6zM50 4h6v12h-6zM40 16h8v8h-8zM58 18h8v6h-8zM38 30h10v8H38zM52 30h6v8h-6zM64 36h8v8h-8zM76 38h8v8h-8zM90 36h6v8h-6zM38 48h8v8h-8zM50 46h8v8h-8zM62 50h6v10h-6zM76 50h8v6h-8zM88 48h8v8h-8zM38 62h6v8h-6zM48 62h12v6H48zM70 62h8v8h-8zM84 62h12v6H84zM40 76h8v8h-8zM52 72h6v12h-6zM62 76h8v8h-8zM74 74h8v8h-8zM88 72h8v8h-8zM40 90h12v6H40zM58 88h8v8h-8zM72 88h6v8h-6zM84 86h12v10H84z"/>
+    </g>
   </g>
   <rect x="736" y="43" width="164" height="38" rx="19" fill="#5b4a2b"/>
   <text x="818" y="68" text-anchor="middle" fill="#f8dda2" font-family="Arial,sans-serif" font-size="14" font-weight="700">THERMAL LABEL</text>
-  <text x="500" y="414" text-anchor="middle" fill="#6f6658" font-family="Arial,sans-serif" font-size="14">Missing measured values are marked with ≈ so the preview stays honest.</text>
+  <text x="500" y="414" text-anchor="middle" fill="#6f6658" font-family="Arial,sans-serif" font-size="14">Optional QR opens the Brewfather share link · Missing measured values are marked with ≈</text>
 </svg>
