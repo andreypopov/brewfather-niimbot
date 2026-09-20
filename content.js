@@ -3,13 +3,13 @@
   if (globalThis.__brewLabelLoaded) return;
   globalThis.__brewLabelLoaded = true;
   const B = BrewLabel;
-  let config = null, busy = false;
+  let config = null, busy = false, activePreview = null;
   const bindings = new Map();
   const uiCSS = `
     :host{font:13px Arial,sans-serif;color:#eee;display:inline-flex;align-items:center;margin:0 10px;vertical-align:middle}
     *{box-sizing:border-box}[hidden]{display:none!important}button,a{font:inherit}button{cursor:pointer;border:1px solid #756344;border-radius:6px;color:#f4d597;background:#302b22;padding:7px 10px;white-space:nowrap}
     button:hover{background:#49402e}button:focus-visible{outline:2px solid #ffcc67;outline-offset:2px}button:disabled{opacity:.5;cursor:wait}
-    .group{display:flex;gap:5px}.more{padding:7px 8px}svg{width:15px;height:15px;vertical-align:-3px;margin-right:6px}
+    .group{display:flex;gap:5px}svg{width:15px;height:15px;vertical-align:-3px;margin-right:6px}
     @media(max-width:650px){.caption{display:none}svg{margin:0}:host{margin:0 5px}}
   `;
   const printIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 9V3h12v6M6 17H3V9h18v8h-3M6 14h12v7H6z"/><path d="M17 12h1"/></svg>';
@@ -21,13 +21,22 @@
     header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}h3{font-size:16px;margin:0}p{line-height:1.5;margin:10px 0}button.close{border:0;background:none;font-size:22px;padding:0 4px}
     .paper{background:white;border-radius:6px;display:flex;align-items:center;justify-content:center;padding:8px 0;overflow:hidden}.paper canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
     .muted{color:#b8b5af;font-size:12px}.status{white-space:pre-wrap;overflow-wrap:anywhere}.error{color:#ffb4a9}.actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
-    </style><section class="panel" role="region" aria-label="Brewfather label"><header><h3>Batch label</h3><button class="close" title="Close" aria-label="Close">×</button></header><div class="paper" hidden></div><p class="meta muted"></p><p class="status" role="status" aria-live="polite"></p><p class="notes muted"></p><div class="actions"><button class="settings">Label settings</button><button class="disconnect">Disconnect printer</button></div></section>`;
-  const status = panel.querySelector(".status"), paper = panel.querySelector(".paper");
-  panel.querySelector(".close").onclick = () => { panelHost.style.display = "none"; };
+    .job-controls{display:flex;align-items:end;gap:10px;margin-top:14px}.copies-label{display:flex;flex-direction:column;gap:5px;color:#b8b5af;font-size:12px}.copies{width:84px;padding:8px 9px;border:1px solid #756344;border-radius:6px;color:#eee;background:#302b22;font:inherit}.copies:focus{outline:2px solid #ffcc67;outline-offset:1px}.print-now{min-width:92px}
+    </style><section class="panel" role="region" aria-label="Brewfather label"><header><h3>Batch label</h3><button class="close" title="Close" aria-label="Close">×</button></header><div class="paper" hidden></div><p class="meta muted"></p><p class="status" role="status" aria-live="polite"></p><p class="notes muted"></p><div class="job-controls"><label class="copies-label" for="brewlabel-copies">Copies<input class="copies" id="brewlabel-copies" type="number" min="1" max="50" step="1" value="1" inputmode="numeric"></label><button class="print-now">Print</button></div><div class="actions"><button class="settings">Label settings</button><button class="disconnect">Disconnect printer</button></div></section>`;
+  const status = panel.querySelector(".status"), paper = panel.querySelector(".paper"), copiesInput = panel.querySelector(".copies");
+  panel.querySelector(".close").onclick = () => { activePreview = null; panelHost.style.display = "none"; };
   panel.querySelector(".settings").onclick = () => rpc({type: "open-options"}).catch(showError);
   panel.querySelector(".disconnect").onclick = async () => {
     if (busy) return;
     await Niimbot.disconnect(); showStatus("Printer disconnected. You can choose a device on the next print.");
+  };
+  panel.querySelector(".print-now").onclick = e => {
+    e.preventDefault();
+    if (busy) return;
+    try {
+      if (!activePreview) throw new Error("Preview a batch first, then click Print.");
+      run(activePreview.binding, true, readCopies()).catch(showError);
+    } catch (error) { showError(error); }
   };
 
   async function rpc(message) {
@@ -50,7 +59,15 @@
   function setBusy(value) {
     busy = value;
     for (const {shadow} of bindings.values()) for (const btn of shadow.querySelectorAll("button")) btn.disabled = value;
+    panel.querySelector(".print-now").disabled = value;
+    panel.querySelector(".copies").disabled = value;
+    panel.querySelector(".settings").disabled = value;
     panel.querySelector(".disconnect").disabled = value;
+  }
+  function readCopies() {
+    const copies = Number(copiesInput.value);
+    if (!Number.isInteger(copies) || copies < 1 || copies > 50) throw new Error("Copies must be a whole number from 1 to 50.");
+    return copies;
   }
   function cardInfo(card) {
     const number = card.querySelector(".batch-number")?.textContent.trim().match(/^#(\d+)$/);
@@ -76,8 +93,9 @@
     panel.querySelector(".notes").textContent = [...label.warnings, ...result.warnings].join(" ");
     return result;
   }
-  async function run(binding, print) {
+  async function run(binding, print = false, requestedCopies = null) {
     if (busy) return;
+    if (!print) activePreview = null;
     if (!config?.configured) {
       await rpc({type: "open-options"});
       showStatus("Save your Brewfather access details in the extension settings first."); return;
@@ -101,14 +119,21 @@
         if (print && printer?.modelId !== B.MODEL.id) {
           await Niimbot.disconnect(); throw new Error(`Selected ${printer?.label || "an unidentified printer"}. Niimbot D11_H (300 dpi) is required.`);
         }
-        const result = draw(reply.label, fresh.settings);
-        if (!print) { showStatus("Preview ready. Click the batch card button to print."); return; }
+        const copies = print ? (requestedCopies ?? readCopies()) : 1;
+        const printSettings = {...fresh.settings, copies};
+        const result = draw(reply.label, printSettings);
+        if (!print) {
+          copiesInput.value = "1";
+          activePreview = {binding, snapshot, url};
+          showStatus("Preview ready. Set the number of copies, then click Print.");
+          return;
+        }
         if (result.warnings.length) throw new Error("The text does not fit. Choose a longer label in settings.");
         await Niimbot.printImage(result.output.toDataURL("image/png"), {
-          model: B.MODEL, size: result.size, copies: fresh.settings.copies, density: fresh.settings.density,
+          model: B.MODEL, size: result.size, copies, density: fresh.settings.density,
           onProgress: p => showStatus(p === "ok" ? "The printer confirmed completion." : "Printing…")
         });
-        showStatus(`The printer confirmed ${fresh.settings.copies} ${fresh.settings.copies === 1 ? "copy" : "copies"} · batch #${reply.label.batchNo ?? "—"}`);
+        showStatus(`The printer confirmed ${copies} ${copies === 1 ? "copy" : "copies"} · batch #${reply.label.batchNo ?? "—"}`);
       });
     } catch (error) { showError(error); }
     finally { setBusy(false); }
@@ -119,11 +144,10 @@
     const host = document.createElement("span");
     host.className = "brewlabel-controls";
     const shadow = host.attachShadow({mode: "open"});
-    shadow.innerHTML = `<style>${uiCSS}</style><span class="group"><button class="print" title="Print a label on Niimbot D11H">${printIcon}<span class="caption">Print label</span></button><button class="more" title="Preview label" aria-label="Preview label">···</button></span>`;
+    shadow.innerHTML = `<style>${uiCSS}</style><span class="group"><button class="print" title="Preview and print a label on Niimbot D11H">${printIcon}<span class="caption">Print label</span></button></span>`;
     const binding = {host, shadow, card}; bindings.set(parent, binding);
     for (const event of ["click", "pointerdown", "keydown", "keyup"]) host.addEventListener(event, e => e.stopPropagation());
-    shadow.querySelector(".print").onclick = e => { e.preventDefault(); e.stopPropagation(); if (e.isTrusted) run(binding, true).catch(showError); };
-    shadow.querySelector(".more").onclick = e => { e.preventDefault(); e.stopPropagation(); if (e.isTrusted) run(binding, false).catch(showError); };
+    shadow.querySelector(".print").onclick = e => { e.preventDefault(); e.stopPropagation(); if (e.isTrusted) run(binding, false).catch(showError); };
     for (const btn of shadow.querySelectorAll("button")) btn.disabled = busy;
     const badge = parent.querySelector(".day-badge");
     if (badge) parent.insertBefore(host, badge); else parent.append(host);

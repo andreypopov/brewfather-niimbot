@@ -8,7 +8,7 @@ FILES = [
     'options.html', 'options.css', 'options.js', 'sample.js', 'README.md', 'LICENSE',
     'vendor/niimbot.js', 'vendor/NIIMBOT-LICENSE', 'vendor/README.md',
 ]
-output = ROOT / 'dist' / 'brewfather-niimbot-0.1.0.zip'
+output = ROOT / 'dist' / 'brewfather-niimbot-0.2.0.zip'
 output.parent.mkdir(exist_ok=True)
 with ZipFile(output, 'w', ZIP_DEFLATED) as bundle:
     for name in FILES:

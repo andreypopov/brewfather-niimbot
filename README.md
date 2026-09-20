@@ -1,12 +1,14 @@
 # Brewfather → Niimbot D11H
 
-A local Chrome Manifest V3 extension that adds **Print label** and **··· (Preview)**
-to the header of every batch card in the Brewfather Batches list. The buttons are
-also available inside an individual batch. Recipes and batches are never changed.
+A local Chrome Manifest V3 extension that adds one **Print label** button to the
+header of every batch card in the Brewfather Batches list. Clicking it opens a
+preview; the preview panel controls the copy count and the final print action.
+Recipes and batches are never changed.
 
 The default label is **40 × 14 mm**, one copy, print density 3. Label length, tape
-width, copy count, density, and feed position can be changed in the settings. The
-target printer is **Niimbot D11_H, 300 dpi**, rather than the older 203 dpi D11.
+width, density, and feed position can be changed in the settings. The copy count
+is selected in the preview panel for each print job. The target printer is
+**Niimbot D11_H, 300 dpi**, rather than the older 203 dpi D11.
 
 ## Install the unpacked extension
 
@@ -22,7 +24,7 @@ target printer is **Niimbot D11_H, 300 dpi**, rather than the older 203 dpi D11.
 7. Click **Save settings** and reload the Brewfather tab. Buttons will appear in Batches.
 
 The repository also contains a ready-to-download package at
-`dist/brewfather-niimbot-0.1.0.zip`. Chrome's **Load unpacked** expects a folder,
+`dist/brewfather-niimbot-0.2.0.zip`. Chrome's **Load unpacked** expects a folder,
 so unzip the package first and select the extracted `brewfather-niimbot` folder.
 
 The package can be rebuilt with:
@@ -35,10 +37,12 @@ python3 package.py
 
 - Load the label roll you want and turn on the D11H near the computer.
 - Close the NIIMBOT phone app if it is holding the Bluetooth connection.
-- Click **···** on a batch card to check the layout without using a label.
-- Click **Print label** and select `D11_H` in Chrome's Bluetooth chooser.
+- Click **Print label** on a batch card to open its preview.
+- Set **Copies** (1 by default), click **Print**, and select `D11_H` in Chrome's
+  Bluetooth chooser.
 - If macOS asks, allow Chrome to use Bluetooth.
-- While the tab and connection stay open, later labels print with one click.
+- While the tab and connection stay open, later jobs can print from the preview
+  panel without choosing the device again.
 
 After a tab reload, printer shutdown, or Bluetooth disconnect, Chrome may ask you to
 choose the device again. This version does not provide background reconnect after

@@ -3,7 +3,7 @@
   const B = BrewLabel, $ = id => document.getElementById(id);
   const extension = !!globalThis.chrome?.runtime?.id;
   let preview;
-  const keys = ["lengthMm", "widthMm", "copies", "density", "offsetMm"];
+  const keys = ["lengthMm", "widthMm", "density", "offsetMm"];
   function values() { return B.settings({...Object.fromEntries(keys.map(key => [key, Number($(key).value)])), rotate180: $("rotate180").checked}); }
   function render() {
     try {
