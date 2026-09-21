@@ -4,12 +4,12 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 ROOT = Path(__file__).resolve().parent
 FILES = [
-    'manifest.json', 'label.js', 'api.js', 'background.js', 'content.js',
+    'manifest.json', 'label.js', 'api.js', 'background.js', 'content.js', 'share-page.js',
     'options.html', 'options.css', 'options.js', 'sample.js', 'README.md', 'LICENSE',
     'vendor/niimbot.js', 'vendor/NIIMBOT-LICENSE', 'vendor/qrcode-generator.js',
     'vendor/QRCODE-GENERATOR-LICENSE', 'vendor/README.md',
 ]
-output = ROOT / 'dist' / 'brewfather-niimbot-0.3.0.zip'
+output = ROOT / 'dist' / 'brewfather-niimbot-0.5.0.zip'
 output.parent.mkdir(exist_ok=True)
 with ZipFile(output, 'w', ZIP_DEFLATED) as bundle:
     for name in FILES:

@@ -12,7 +12,7 @@ Choose one of these options:
 
 - Download the [latest source ZIP](https://github.com/andreypopov/brewfather-niimbot/archive/refs/heads/main.zip)
   and unzip it.
-- Download the smaller [credential-free package](https://github.com/andreypopov/brewfather-niimbot/raw/main/dist/brewfather-niimbot-0.3.0.zip)
+- Download the smaller [credential-free package](https://github.com/andreypopov/brewfather-niimbot/raw/main/dist/brewfather-niimbot-0.5.0.zip)
   and unzip it.
 - Clone the repository with:
 
@@ -87,8 +87,9 @@ using real tape.
 3. Open **Batches** in Brewfather.
 4. Click the single **Print label** button in the batch header.
 5. Confirm the label preview and enter the desired **Copies**. The default is `1`.
-6. Optionally enable **Add QR**. The recipe must already have a public
-   Brewfather share link; otherwise the preview explains how to resolve it.
+6. Optionally enable **Add QR**. The extension reuses an existing recipe link or
+   creates a public link in the current tab. Wait for the QR code to appear;
+   the preview stays open. Creating a link makes the recipe publicly viewable.
 7. Click the panel's **Print** button.
 8. Select `D11_H` in Chrome's Bluetooth chooser and allow Bluetooth if macOS asks.
 
@@ -103,6 +104,11 @@ ABV ≈4.7%   IBU 47
 OG 1.046   FG ≈1.010
 #119 · 31.08.2026
 ```
+
+If QR preparation fails, the message appears in the preview with **Retry QR**.
+You can turn **Add QR** off and print without a code. Brewfather's trial-plan
+restrictions still apply to creating new share links; existing public links can
+be reused. Turning QR off does not revoke a link already created.
 
 ## Updating the unpacked extension
 
@@ -124,7 +130,9 @@ access values remain in the extension's local storage.
 | Access is missing | Save both User ID and API key; check that the key can read batches. |
 | No D11H in the chooser | Turn on the printer, close the phone app, and keep the printer near the Mac or PC. |
 | Preview text is clipped | Increase **Length, mm** in **Label settings** and preview again. |
-| QR is unavailable | Share the recipe in Brewfather, preview again, or turn **Add QR** off for this label. |
+| QR is unavailable | Follow the message in the preview and click **Retry QR**, or turn **Add QR** off for this label. |
+| Sharing is not ready | Reload Brewfather after reloading the extension so the sharing bridge can start. |
+| A trial-plan restriction appears | Use an existing public link or print without QR; new links follow Brewfather's account restrictions. |
 | A second label does not start | Wait for the status message to finish; Web Locks prevents concurrent jobs from other tabs. |
 
 For API behavior, rendering details, privacy, and development checks, see the

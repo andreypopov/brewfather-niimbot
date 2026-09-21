@@ -4,6 +4,7 @@
   globalThis.__brewLabelLoaded = true;
   const B = BrewLabel;
   let config = null, busy = false, activePreview = null;
+  const shareWaiters = new Map();
   const bindings = new Map();
   const uiCSS = `
     :host{font:13px Arial,sans-serif;color:#eee;display:inline-flex;align-items:center;margin:0 10px;vertical-align:middle}
@@ -22,8 +23,8 @@
     .paper{background:white;border-radius:6px;display:flex;align-items:center;justify-content:center;padding:8px 0;overflow:hidden}.paper canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
     .muted{color:#b8b5af;font-size:12px}.status{white-space:pre-wrap;overflow-wrap:anywhere}.error{color:#ffb4a9}.actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
     .job-controls{display:flex;align-items:end;gap:10px;margin-top:14px}.copies-label{display:flex;flex-direction:column;gap:5px;color:#b8b5af;font-size:12px}.copies{width:84px;padding:8px 9px;border:1px solid #756344;border-radius:6px;color:#eee;background:#302b22;font:inherit}.copies:focus{outline:2px solid #ffcc67;outline-offset:1px}.qr-label{display:flex;align-items:center;gap:6px;height:35px;color:#eee;white-space:nowrap}.qr-label input{width:16px;height:16px;accent-color:#f0c76b}.print-now{min-width:92px}
-    </style><section class="panel" role="region" aria-label="Brewfather label"><header><h3>Batch label</h3><button class="close" title="Close" aria-label="Close">×</button></header><div class="paper" hidden></div><p class="meta muted"></p><p class="status" role="status" aria-live="polite"></p><p class="notes muted"></p><div class="job-controls"><label class="copies-label" for="brewlabel-copies">Copies<input class="copies" id="brewlabel-copies" type="number" min="1" max="50" step="1" value="1" inputmode="numeric"></label><label class="qr-label"><input class="add-qr" type="checkbox">Add QR</label><button class="print-now">Print</button></div><div class="actions"><button class="settings">Label settings</button><button class="disconnect">Disconnect printer</button></div></section>`;
-  const status = panel.querySelector(".status"), paper = panel.querySelector(".paper"), copiesInput = panel.querySelector(".copies"), qrInput = panel.querySelector(".add-qr");
+    </style><section class="panel" role="region" aria-label="Brewfather label"><header><h3>Batch label</h3><button class="close" title="Close" aria-label="Close">×</button></header><div class="paper" hidden></div><p class="meta muted"></p><p class="status" role="status" aria-live="polite"></p><p class="notes muted"></p><div class="job-controls"><label class="copies-label" for="brewlabel-copies">Copies<input class="copies" id="brewlabel-copies" type="number" min="1" max="50" step="1" value="1" inputmode="numeric"></label><label class="qr-label"><input class="add-qr" type="checkbox">Add QR</label><button class="print-now">Print</button></div><div class="actions"><button class="share-now" hidden>Retry QR</button><button class="settings">Label settings</button><button class="disconnect">Disconnect printer</button></div></section>`;
+  const status = panel.querySelector(".status"), paper = panel.querySelector(".paper"), copiesInput = panel.querySelector(".copies"), qrInput = panel.querySelector(".add-qr"), shareNow = panel.querySelector(".share-now");
   panel.querySelector(".close").onclick = () => { activePreview = null; panelHost.style.display = "none"; };
   qrInput.onchange = () => {
     if (busy || !activePreview) return;
@@ -31,7 +32,13 @@
       const copies = readCopies();
       const result = draw(activePreview.label, {...activePreview.settings, copies, addQr: qrInput.checked});
       showStatus(result.warnings.length ? "Preview updated. Resolve the note below or turn off Add QR, then click Print." : "Preview updated. Set the number of copies, then click Print.");
+      if (qrInput.checked && !activePreview.label.shareUrl) ensureShareLink(activePreview).catch(() => {});
+      setBusy(busy);
     } catch (error) { showError(error); }
+  };
+  shareNow.onclick = () => {
+    if (busy || !activePreview) return;
+    ensureShareLink(activePreview).catch(() => {});
   };
   panel.querySelector(".settings").onclick = () => rpc({type: "open-options"}).catch(showError);
   panel.querySelector(".disconnect").onclick = async () => {
@@ -43,6 +50,7 @@
     if (busy) return;
     try {
       if (!activePreview) throw new Error("Preview a batch first, then click Print.");
+      if (activePreview.sharePending && qrInput.checked) return;
       run(activePreview.binding, true, readCopies(), qrInput.checked).catch(showError);
     } catch (error) { showError(error); }
   };
@@ -51,6 +59,60 @@
     const response = await chrome.runtime.sendMessage(message);
     if (!response?.ok) throw new Error(response?.error || "Reload the page after updating the extension.");
     return response;
+  }
+  window.addEventListener("message", event => {
+    const message = event.data;
+    if (event.source !== window || event.origin !== location.origin ||
+        message?.source !== "brewfather-niimbot-page" || message.type !== "share-result") return;
+    const waiter = shareWaiters.get(message.requestId);
+    if (waiter?.recipeId !== message.recipeId) return;
+    if (!waiter) return;
+    shareWaiters.delete(message.requestId); clearTimeout(waiter.timer);
+    if (!message.ok) waiter.reject(new Error(message.error || "Could not prepare the QR code. Try again."));
+    else waiter.resolve(message);
+  });
+  function requestShare(recipeId) {
+    return new Promise((resolve, reject) => {
+      const requestId = crypto.randomUUID();
+      const timer = setTimeout(() => {
+        shareWaiters.delete(requestId);
+        reject(new Error("Brewfather did not respond. Check your connection and try Add QR again."));
+      }, 50000);
+      shareWaiters.set(requestId, {recipeId, resolve, reject, timer});
+      window.postMessage({source: "brewfather-niimbot", type: "share-recipe", requestId, recipeId}, location.origin);
+    });
+  }
+  async function ensureShareLink(preview) {
+    if (!preview?.label) throw new Error("Preview a batch before creating a recipe share link.");
+    if (preview.label.shareUrl) return preview.label.shareUrl;
+    if (!preview.label.recipeId) {
+      const error = new Error("Brewfather did not provide a recipe ID. Turn off Add QR to print this label.");
+      if (activePreview === preview) showError(error);
+      throw error;
+    }
+    if (preview.sharePromise) return preview.sharePromise;
+    preview.sharePending = true;
+    setBusy(busy); shareNow.hidden = true;
+    showStatus("Preparing QR code…");
+    preview.sharePromise = (async () => {
+      const result = await requestShare(preview.label.recipeId);
+      const shareUrl = B.normalizeShareUrl(result.shareUrl);
+      if (!shareUrl) throw new Error("Brewfather did not return a valid public recipe link.");
+      preview.label.shareUrl = shareUrl;
+      if (activePreview === preview && qrInput.checked) {
+        const copies = readCopies();
+        const drawn = draw(preview.label, {...preview.settings, copies, addQr: true});
+        showStatus(drawn.warnings.length ? "Check the label note before printing." : "QR code ready. Click Print when you are ready.");
+      }
+      return shareUrl;
+    })().catch(error => {
+      if (activePreview === preview && qrInput.checked) { showError(error); shareNow.hidden = false; }
+      throw error;
+    }).finally(() => {
+      preview.sharePromise = null; preview.sharePending = false;
+      setBusy(busy);
+    });
+    return preview.sharePromise;
   }
   function showStatus(message, error = false) {
     if (!panelHost.isConnected) document.body.append(panelHost);
@@ -67,9 +129,10 @@
   function setBusy(value) {
     busy = value;
     for (const {shadow} of bindings.values()) for (const btn of shadow.querySelectorAll("button")) btn.disabled = value;
-    panel.querySelector(".print-now").disabled = value;
+    panel.querySelector(".print-now").disabled = value || Boolean(activePreview?.sharePending && qrInput.checked);
     panel.querySelector(".copies").disabled = value;
     panel.querySelector(".add-qr").disabled = value;
+    shareNow.disabled = value || Boolean(activePreview?.sharePending);
     panel.querySelector(".settings").disabled = value;
     panel.querySelector(".disconnect").disabled = value;
   }
@@ -94,12 +157,30 @@
     if (!id) throw new Error("Open a batch or the Batches list.");
     return {type: "batch", id};
   }
+  function currentPreviewBinding(preview) {
+    if (location.href !== preview.url) throw new Error("The page changed. Click print on the intended batch again.");
+    if (preview.binding.host.isConnected) return preview.binding;
+    // Brewfather can replace the entire batch list after a data refresh.
+    // Reattach only to one visible card with the exact original number/title.
+    scan();
+    const matches = [...bindings.values()].filter(binding => {
+      if (!visible(binding.host)) return false;
+      try { return JSON.stringify(requestFor(binding)) === JSON.stringify(preview.snapshot); }
+      catch { return false; }
+    });
+    if (matches.length !== 1) throw new Error("The batch card is no longer visible. Preview the intended batch again.");
+    preview.binding = matches[0];
+    return preview.binding;
+  }
   function draw(label, settings) {
     const result = B.render(label, settings);
     paper.hidden = false; paper.replaceChildren(result.canvas);
     panel.querySelector("h3").textContent = `Batch label${label.batchNo === null ? "" : ` #${label.batchNo}`}`;
     panel.querySelector(".meta").textContent = `${settings.lengthMm} × ${settings.widthMm} mm · ${settings.copies} ${settings.copies === 1 ? "copy" : "copies"} · D11H${settings.addQr ? " · QR" : ""}`;
-    panel.querySelector(".notes").textContent = [...label.warnings, ...result.warnings].join(" ");
+    // A link being prepared is a normal loading state, not a missing-link error.
+    const visibleWarnings = settings.addQr && !label.shareUrl ? [] : result.warnings;
+    panel.querySelector(".notes").textContent = [...label.warnings, ...visibleWarnings].join(" ");
+    shareNow.hidden = true;
     return result;
   }
   async function run(binding, print = false, requestedCopies = null, requestedQr = null) {
@@ -109,14 +190,18 @@
       await rpc({type: "open-options"});
       showStatus("Save your Brewfather access details in the extension settings first."); return;
     }
+    const preview = print ? activePreview : null;
+    if (preview?.binding === binding) binding = currentPreviewBinding(preview);
     const snapshot = requestFor(binding), url = location.href;
     setBusy(true); paper.hidden = true; panel.querySelector(".notes").textContent = "";
-    showStatus(print ? "Connecting to the printer and loading the batch…" : "Loading the batch…");
+    showStatus(print ? "Loading the batch…" : "Loading the batch…");
     try {
       await navigator.locks.request("brewfather-niimbot-d11h", {ifAvailable: true}, async lock => {
         if (!lock) throw new Error("A label is already printing from another tab. Wait for it to finish.");
-        // Start requestDevice before awaiting network: the chooser needs the click gesture.
-        const connect = print ? Niimbot.identify(B.MODEL) : Promise.resolve(null);
+        // Keep the Bluetooth chooser tied to the user's Print click whenever QR setup
+        // is not needed. A missing QR link is handled first and asks for a second click.
+        const requestedQrNow = print ? (requestedQr ?? qrInput.checked) : false;
+        const connect = print && (!requestedQrNow || Boolean(activePreview?.label?.shareUrl)) ? Niimbot.identify(B.MODEL) : Promise.resolve(null);
         const settled = await Promise.allSettled([connect, rpc(snapshot), rpc({type: "settings"})]);
         const failed = settled.find(r => r.status === "rejected");
         if (failed) throw failed.reason;
@@ -125,23 +210,49 @@
         if (location.href !== url || JSON.stringify(requestFor(binding)) !== JSON.stringify(snapshot)) {
           throw new Error("The card or page changed. Click print on the intended batch again.");
         }
-        if (print && printer?.modelId !== B.MODEL.id) {
-          await Niimbot.disconnect(); throw new Error(`Selected ${printer?.label || "an unidentified printer"}. Niimbot D11_H (300 dpi) is required.`);
-        }
         const copies = print ? (requestedCopies ?? readCopies()) : 1;
         const addQr = print ? (requestedQr ?? qrInput.checked) : Boolean(fresh.settings.addQrDefault);
         const printSettings = {...fresh.settings, copies, addQr};
+        // Brewfather's batch API may omit a link created through the recipe UI.
+        // Refresh measurements, but keep that link for this exact batch/recipe.
+        // Otherwise every Print click starts Share again and exits before printing.
+        if (preview?.binding === binding && preview.url === url &&
+            reply.label.id && reply.label.id === preview.label.id &&
+            reply.label.recipeId && reply.label.recipeId === preview.label.recipeId &&
+            !reply.label.shareUrl) {
+          reply.label.shareUrl = B.normalizeShareUrl(preview.label.shareUrl);
+        }
+        if (preview && activePreview === preview) {
+          preview.label = reply.label;
+          preview.settings = fresh.settings;
+        }
         const result = draw(reply.label, printSettings);
         if (!print) {
           copiesInput.value = "1";
           qrInput.checked = Boolean(fresh.settings.addQrDefault);
           activePreview = {binding, snapshot, url, label: reply.label, settings: fresh.settings};
           showStatus(result.warnings.length ? "Preview ready. Resolve the note below or turn off Add QR, then click Print." : "Preview ready. Set the number of copies, then click Print.");
+          if (addQr && !reply.label.shareUrl) ensureShareLink(activePreview).catch(() => {});
           return;
         }
-        if (result.warnings.length) throw new Error(result.warnings.join(" "));
-        await Niimbot.printImage(result.output.toDataURL("image/png"), {
-          model: B.MODEL, size: result.size, copies, density: fresh.settings.density,
+        if (addQr && !reply.label.shareUrl) {
+          if (!activePreview) throw new Error("Preview the batch before printing.");
+          if (printer) await Niimbot.disconnect();
+          activePreview.label = reply.label; activePreview.settings = fresh.settings;
+          await ensureShareLink(activePreview);
+          showStatus("QR code ready. Click Print to choose the D11H.");
+          return;
+        }
+        // Start requestDevice only after QR setup is complete: the chooser needs the print click gesture.
+        showStatus("Connecting to the printer…");
+        if (!printer) throw new Error("Click Print again to choose the D11H.");
+        if (printer?.modelId !== B.MODEL.id) {
+          await Niimbot.disconnect(); throw new Error(`Selected ${printer?.label || "an unidentified printer"}. Niimbot D11_H (300 dpi) is required.`);
+        }
+        const finalResult = draw(reply.label, printSettings);
+        if (finalResult.warnings.length) throw new Error(finalResult.warnings.join(" "));
+        await Niimbot.printImage(finalResult.output.toDataURL("image/png"), {
+          model: B.MODEL, size: finalResult.size, copies, density: fresh.settings.density,
           onProgress: p => showStatus(p === "ok" ? "The printer confirmed completion." : "Printing…")
         });
         showStatus(`The printer confirmed ${copies} ${copies === 1 ? "copy" : "copies"} · batch #${reply.label.batchNo ?? "—"}`);

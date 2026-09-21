@@ -45,12 +45,22 @@ test("recipe share links are accepted only from Brewfather public-share forms", 
   assert.equal(B.findSharedRecipeUrl({share: {id: "etWBx3UNaKixBc"}}), "https://share.brewfather.app/etWBx3UNaKixBc");
   assert.equal(B.findSharedRecipeUrl({shareUrl: "https://evil.example/etWBx3UNaKixBc", _id: "internal-id"}), "");
   assert.equal(B.normalize({...fixture(), recipe: {...fixture().recipe, shareUrl: "https://web.brewfather.app/share/etWBx3UNaKixBc"}}).shareUrl, "https://web.brewfather.app/share/etWBx3UNaKixBc");
+  assert.equal(B.shareUrlFromText("Copy https://share.brewfather.app/etWBx3UNaKixBc to a friend."), "https://share.brewfather.app/etWBx3UNaKixBc");
+  assert.equal(B.shareUrlFromText("https://evil.example/etWBx3UNaKixBc"), "");
 });
 test("only Brewfather batch URLs produce a batch ID", () => {
   assert.equal(B.batchId("https://web.brewfather.app/tabs/batches/batch/abc123?foo=bar"), "abc123");
   assert.equal(B.batchId("https://web.brewfather.app/tabs/recipes/recipe/abc123"), null);
   assert.equal(B.batchId("https://evil.example/tabs/batches/batch/abc123"), null);
   assert.equal(B.batchId("https://web.brewfather.app/tabs/batches"), null);
+});
+test("recipe IDs are accepted only from Brewfather recipe routes", () => {
+  assert.equal(B.recipeId("https://web.brewfather.app/tabs/recipes/recipe/recipe123"), "recipe123");
+  assert.equal(B.recipeId("https://web.brewfather.app/tabs/batches/batch/batch123/recipe/recipe123"), "recipe123");
+  assert.equal(B.recipeId("https://web.brewfather.app/tabs/batches/batch/recipe123"), null);
+  assert.equal(B.recipeId("https://evil.example/tabs/recipes/recipe/recipe123"), null);
+  const b = fixture(); b.recipe._id = "recipe119";
+  assert.equal(B.normalize(b).recipeId, "recipe119");
 });
 test("card resolution uses number AND full recipe name, ambiguity fails closed", () => {
   const row = {...fixture(), _id: "batch119"};
@@ -99,13 +109,17 @@ test("BLE canvas is rotated, without resizing or stretching landscape pixels", (
   assert.deepEqual(calls.find(c => c[0] === "drawImage").slice(2), [0, 0]);
 });
 test("QR rendering reserves a square and blocks printing when a share link is missing", () => {
+  const calls = [];
   const makeCanvas = () => {
-    const context = {fillRect(){}, fillText(){}, measureText: s => ({width: s.length * 2}),
+    const context = {fillRect(...args){calls.push(args)}, fillText(){}, measureText: s => ({width: s.length * 2}),
       save(){}, restore(){}, translate(){}, rotate(){}, drawImage(){}};
     return {width: 0, height: 0, getContext: () => context};
   };
   const withQr = B.render(B.normalize(fixture()), {...B.DEFAULTS, addQr: true}, makeCanvas);
   assert.equal(withQr.warnings.length, 0);
+  assert.equal(withQr.canvas.height, 144);
+  assert.ok(calls.some(call => call[2] === 144 && call[3] === 144), "QR background must use the full 14 mm tape height");
+  assert.ok(calls.some(call => call[2] === 4 && call[3] === 4), "QR modules should use four printer dots on 14 mm tape");
   const missing = fixture(); delete missing.recipe.shareUrl;
   const withoutLink = B.render(B.normalize(missing), {...B.DEFAULTS, addQr: true}, makeCanvas);
   assert.match(withoutLink.warnings[0], /no Brewfather share link/);

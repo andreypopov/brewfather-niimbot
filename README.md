@@ -8,8 +8,9 @@
 Print a fresh Brewfather batch label on a **Niimbot D11H** directly from Chrome.
 The extension adds one **Print label** button to each batch card, opens a live
 preview, lets you choose the number of copies and whether to add a QR code, and
-sends the final image over Bluetooth. It does not edit recipes, batches,
-inventory, or fermentation data.
+sends the final image over Bluetooth. It does not edit batch, inventory, or
+fermentation data. When you request a QR code for a private recipe, it can create
+a public Brewfather recipe link in the current tab. The preview stays open.
 
 ![Brewfather to Niimbot three-step workflow](docs/images/workflow.svg)
 
@@ -63,7 +64,7 @@ The included [.env.example](.env.example) shows the expected variable names.
 
 The repository also contains a credential-free package:
 
-[Download `brewfather-niimbot-0.3.0.zip`](https://github.com/andreypopov/brewfather-niimbot/raw/main/dist/brewfather-niimbot-0.3.0.zip)
+[Download `brewfather-niimbot-0.5.0.zip`](https://github.com/andreypopov/brewfather-niimbot/raw/main/dist/brewfather-niimbot-0.5.0.zip)
 
 Unzip it first, then select the extracted `brewfather-niimbot` folder in **Load
 unpacked**. The package contains only the files needed by the extension; tests and
@@ -78,7 +79,8 @@ For a full illustrated walkthrough, see [docs/INSTALL.md](docs/INSTALL.md).
 2. Close the NIIMBOT phone app if it is holding the Bluetooth connection.
 3. In Brewfather, click **Print label** on the desired batch card.
 4. Check the preview. Set **Copies**; it starts at `1` for every new preview.
-5. Turn on **Add QR** when the recipe already has a Brewfather share link.
+5. Turn on **Add QR** and wait for the QR code to appear. If needed, the
+   extension creates a public recipe link without leaving the preview.
 6. Click **Print**, then choose `D11_H` in Chrome's Bluetooth chooser.
 7. If macOS asks, allow Chrome to use Bluetooth.
 
@@ -112,13 +114,32 @@ measurement.
 
 ### QR code labels
 
-When **Add QR** is checked, the renderer reads a public share URL already
-present on the batch's recipe data and draws the QR code directly into the
-preview. The code points to Brewfather's public share page, so a person can
-open the recipe without signing in. Create or verify the recipe's **Share**
-link in Brewfather before enabling the option. If no share link is available,
-the preview explains the problem and the extension blocks the print until you
-turn **Add QR** off or share the recipe.
+When **Add QR** is checked, the renderer draws a QR code that points to
+Brewfather's public recipe page. If the batch data already contains a share URL,
+the preview is immediate. Otherwise, the extension asks the already loaded
+Brewfather app for the recipe's current link. If the recipe is private, it waits
+for account access to finish loading and creates the link. Everything happens in
+the current tab: no navigation, extra tabs, Share dialogs, or Upgrade popups.
+
+The preview shows **Preparing QR code…** while this runs. **Print** becomes
+available when the code is ready. You can turn **Add QR** off to print without
+it, or use **Retry QR** after a connection error. A genuine Brewfather trial-plan
+restriction is shown inside the preview; it is not bypassed. An existing public
+link can still be reused.
+
+On the default 40 × 14 mm roll, the QR area uses the full **144-dot printable
+height**, with square modules aligned to whole printer dots. The physical print
+head is narrower than the tape. Scan a test print to check readability on your
+roll and at your chosen density.
+
+Once the QR is ready, **Print** reuses that link while refreshing the batch
+measurements. Repeated print jobs do not request sharing again. A link is never
+carried over to a different batch or recipe.
+
+Creating a share link makes the recipe publicly viewable. Only the recipe's
+sharing fields and public-link record are merged; ingredients and measurements
+are not resaved. Turning **Add QR** off removes the code from this print job; it
+does not revoke a link already created. Manage public visibility in Brewfather.
 
 ## How batch matching works
 
@@ -155,8 +176,12 @@ label roll.
 ## Privacy and permissions
 
 - The Brewfather key is kept in `chrome.storage.local` and is not synced.
-- Requests go only to `https://api.brewfather.app/` and use `GET`.
-- The extension never edits Brewfather data.
+- The API requests go only to `https://api.brewfather.app/` and use `GET`.
+- QR link creation uses the signed-in Brewfather page and can make a recipe
+  publicly viewable. It starts only when **Add QR** is selected (including the
+  default setting). No additional API key permissions are needed.
+- The page bridge exchanges only recipe IDs, request IDs, public URLs, and status
+  messages. Brewfather authentication stays inside the app.
 - There are no analytics, background servers, or third-party tracking services.
 - The public repository and distribution ZIP contain no credentials.
 
@@ -169,7 +194,9 @@ label roll.
 | Bluetooth chooser is empty | Turn on the D11H, close the NIIMBOT phone app, keep Chrome near the printer, and try **Print** again. |
 | The wrong roll size is shown | Open **Label settings**, change length or width, and preview the batch again before printing. |
 | Text does not fit | Choose a longer label length or shorten the recipe name in Brewfather. The extension blocks a print with clipped text. |
-| QR code is unavailable | Share the recipe in Brewfather, preview the batch again, or turn **Add QR** off for this job. |
+| QR code is unavailable | Read the message in the preview and use **Retry QR**. You can turn **Add QR** off to print the label without a code. |
+| QR sharing is not ready after an update | Reload Brewfather after reloading the extension. The sharing bridge must load when the page starts. |
+| Brewfather reports a trial-plan restriction | Use an existing public link or print without QR. Creating a new link follows Brewfather's account restrictions. |
 | Chrome asks for the printer again | This is expected after a tab reload, browser restart, printer shutdown, or lost Bluetooth connection. |
 
 ## Development
@@ -177,7 +204,7 @@ label roll.
 Run the automated checks:
 
 ```sh
-node --test tests/core.test.cjs
+node --test tests/*.test.cjs
 ```
 
 Run the credential-free browser harness:
@@ -201,8 +228,18 @@ python3 package.py
 
 The current test suite covers metrics, missing values, geometry, IDs, unique card
 matching, pagination, GET-only API requests, BLE rotation, share-link validation,
-and QR rendering. The public GitHub Actions workflow runs the same tests on every
-push.
+QR rendering, delayed account metadata, trial restrictions, atomic sharing
+updates, and repeated printing with a ready QR. The public GitHub Actions
+workflow runs the same tests on every push.
+
+The sharing bridge runs at `document_start` in the page's `MAIN` world. It observes
+Brewfather's Webpack module registration, identifies the recipe service by its
+methods, and captures the service instance without changing navigation. Sharing
+uses the same two data records as Brewfather's Share action, in one merge commit.
+This depends on Brewfather's internal web app services because its public API
+does not expose share-link creation. An incompatible app update should stop
+sharing with an inline error; printing without QR remains available. Validate
+both an existing link and a newly created link after such updates.
 
 ## Repository map
 
@@ -211,7 +248,8 @@ push.
 | `manifest.json` | Chrome Manifest V3 entry point and permissions |
 | `content.js` | Brewfather buttons, preview panel, copy input, QR option, and print flow |
 | `label.js` | Label normalization, share-link extraction, QR/metrics rendering, and geometry |
-| `api.js` / `background.js` | Read-only Brewfather API access in the trusted context |
+| `api.js` / `background.js` | Official Brewfather API reads and local settings |
+| `share-page.js` | Current-tab recipe sharing through the signed-in Brewfather app |
 | `options.html` / `options.js` | English settings page and local credential import |
 | `vendor/` | Pinned Niimbot driver, local QR generator, and licenses |
 | `tests/` | Automated tests and a credential-free browser harness |

@@ -14,6 +14,15 @@
     } catch { return null; }
   }
 
+  function recipeId(url) {
+    try {
+      const u = new URL(url);
+      if (u.origin !== "https://web.brewfather.app") return null;
+      const path = u.hash.startsWith("#/") ? u.hash.slice(1) : u.pathname;
+      return path.match(/^\/tabs\/(?:recipes\/recipe\/|batches\/batch\/[A-Za-z0-9_-]{1,128}\/recipe\/)([A-Za-z0-9_-]{1,128})(?:\/|$)/)?.[1] || null;
+    } catch { return null; }
+  }
+
   function settings(input = {}) {
     const result = {...DEFAULTS};
     const limits = {lengthMm: [20, 100], widthMm: [8, 15], copies: [1, 50], density: [1, 5], offsetMm: [-1, 1]};
@@ -76,6 +85,12 @@
     return visit(recipe, [], 0);
   }
 
+  function shareUrlFromText(value) {
+    if (typeof value !== "string") return "";
+    const match = value.match(/https:\/\/(?:share\.brewfather\.app\/[A-Za-z0-9_-]{4,160}|web\.brewfather\.app\/share\/[A-Za-z0-9_-]{4,160})/i);
+    return normalizeShareUrl(match?.[0] || "");
+  }
+
   function normalize(batch) {
     if (!batch || typeof batch !== "object" || !batch.recipe || !text(batch.recipe.name)) {
       throw new Error("The batch has no recipe name. The label was not created.");
@@ -98,7 +113,7 @@
     if (Object.values(metrics).some(m => m.value === null)) warnings.push("Missing metrics are shown as —.");
     const brewDate = number(batch.brewDate);
     const date = brewDate === null ? "" : new Intl.DateTimeFormat("ru-RU", {timeZone: "Europe/London"}).format(new Date(brewDate));
-    return {id: text(batch._id), name: text(r.name), batchName: text(batch.name),
+    return {id: text(batch._id), recipeId: text(r._id), name: text(r.name), batchName: text(batch.name),
       batchNo: number(batch.batchNo), style: text(r.style?.name), date, metrics, warnings,
       shareUrl: findSharedRecipeUrl(r)};
   }
@@ -123,7 +138,10 @@
     try {
       const qr = factory(0, "M");
       qr.addData(label.shareUrl, "Byte"); qr.make();
-      const modules = qr.getModuleCount(), quiet = 4, cell = Math.floor(size / (modules + quiet * 2));
+      // A three-module quiet zone leaves four printer dots per module on the
+      // 144-dot tape height for the usual recipe URL, improving scan distance
+      // while retaining a clean border around the code.
+      const modules = qr.getModuleCount(), quiet = 3, cell = Math.floor(size / (modules + quiet * 2));
       if (cell < 2) return "QR code is too small for this tape width. Choose at least a 9 mm tape width or turn Add QR off.";
       const total = cell * (modules + quiet * 2), left = x + Math.floor((size - total) / 2), top = y + Math.floor((size - total) / 2);
       ctx.fillStyle = "#fff"; ctx.fillRect(x, y, size, size);
@@ -145,7 +163,11 @@
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#000"; ctx.textBaseline = "middle";
-    const margin = 14, qrGap = 12, qrSize = s.addQr ? Math.min(canvas.height - 2 * margin, 108) : 0;
+    // Give the QR code the complete tape height. The previous 108-dot cap left
+    // a small code on 14 mm tape, which many phones could not scan reliably.
+    // Keep the text margin and gap on the left/right, but let the QR quiet zone
+    // run from the top edge to the bottom edge of the label.
+    const margin = 14, qrGap = 12, qrSize = s.addQr ? canvas.height : 0;
     const qrX = canvas.width - margin - qrSize, available = canvas.width - 2 * margin - (qrSize ? qrSize + qrGap : 0);
     const rows = lines(label), sizes = [29, 20, 22, 20, 17];
     const weights = [700, 400, 700, 400, 400];
@@ -175,7 +197,7 @@
     return {canvas, output, size: g, warnings: [...qrWarnings, ...overflow]};
   }
 
-  const api = {DEFAULTS, MODEL, batchId, settings, geometry, normalize, findSharedRecipeUrl, lines, render};
+  const api = {DEFAULTS, MODEL, batchId, recipeId, normalizeShareUrl, shareUrlFromText, settings, geometry, normalize, findSharedRecipeUrl, lines, render};
   root.BrewLabel = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
